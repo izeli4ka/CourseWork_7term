@@ -1,0 +1,29 @@
+{
+    "intents": [
+        {
+            "tag": "dermatomycosis_definition",
+            "patterns": ["What is dermatomycosis?", "Explain dermatomycosis", "Tell me about dermatomycosis"],
+            "responses": ["Dermatomycosis is a fungal skin infection that affects humans and animals."]
+        },
+        {
+            "tag": "dermatomycosis_symptoms",
+            "patterns": ["What are the symptoms of dermatomycosis?", "How do I know if I have dermatomycosis?"],
+            "responses": ["Common symptoms include red, itchy patches on the skin and scaling."]
+        },
+        {
+            "tag": "migraine_definition",
+            "patterns": ["What is a migraine?", "Explain migraine", "Tell me about migraines"],
+            "responses": ["A migraine is a severe headache often accompanied by nausea and sensitivity to light."]
+        },
+        {
+            "tag": "migraine_treatment",
+            "patterns": ["How to treat migraines?", "What are migraine treatments?"],
+            "responses": ["Migraines can be treated with medication, lifestyle changes, and stress management techniques."]
+        },
+        {
+            "tag": "vkr",
+            "patterns": ["What is a vkr?", "Explain vkr", "Tell me about vkr research"],
+            "responses": ["VKR research focuses on applied machine learning and artificial intelligence techniques."]
+        }
+    ]
+}
