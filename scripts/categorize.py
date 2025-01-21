@@ -3,6 +3,7 @@ import numpy as np
 from gensim.models import Word2Vec
 import PyPDF2
 import re
+from sklearn.preprocessing import normalize
 
 def extract_text_from_pdf(pdf_path):
     """
@@ -28,6 +29,7 @@ def categorize_text(text, model):
         return None, words  # Вернуть пустой вектор, если нет известных слов
 
     avg_vector = np.mean(vectors, axis=0)
+    avg_vector = normalize(avg_vector.reshape(1, -1))[0]  # Нормализуем вектор
     missing_words = [word for word in words if word not in model.wv]
     return avg_vector, missing_words
 
@@ -64,6 +66,9 @@ def categorize_and_sort(vectors):
 
     avg_category_1 = np.mean([vec for _, vec in category_1], axis=0)
     avg_category_2 = np.mean([vec for _, vec in category_2], axis=0)
+
+    avg_category_1 = normalize(avg_category_1.reshape(1, -1))[0]  # Нормализуем средний вектор
+    avg_category_2 = normalize(avg_category_2.reshape(1, -1))[0]  # Нормализуем средний вектор
 
     return category_1, category_2, avg_category_1, avg_category_2
 
