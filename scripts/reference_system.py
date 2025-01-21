@@ -1,84 +1,108 @@
 import json
-import os
 import numpy as np
-import random
+import re
 from gensim.models import Word2Vec
-from PyPDF2 import PdfReader
+from scipy.spatial.distance import cosine
 
+# Путь к JSON-файлу
+REFERENCE_FILE = "reference_system.json"
 
-def extract_text_from_pdf(pdf_path):
-    """Извлекает текст из PDF файла."""
+# Простая база знаний (HashMap) на случай отсутствия моделей
+HASHMAP_DB = {
+    "dermatomycosis": "Грибковая инфекция кожи, вызываемая различными патогенными грибками.",
+    "migraine": "Неврологическое заболевание, сопровождающееся сильными головными болями.",
+    "вкр": "Выпускная квалификационная работа — это итоговое исследование студента.",
+}
+
+def load_reference_data(file_path=REFERENCE_FILE):
+    """Загрузка категорий и векторов из reference_system.json."""
     try:
-        with open(pdf_path, 'rb') as f:
-            reader = PdfReader(f)
-            text = "\n".join(page.extract_text() for page in reader.pages if page.extract_text())
-            return text.strip()
-    except Exception as e:
-        print(f"Ошибка при обработке {pdf_path}: {e}")
-        return ""
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print("Ошибка: reference_system.json не найден.")
+        return None
+    except json.JSONDecodeError:
+        print("Ошибка: Ошибка в формате JSON.")
+        return None
 
+def preprocess_text(text):
+    """Очистка и токенизация текста."""
+    text = text.lower()
+    words = re.findall(r"\b\w+\b", text)
+    return words
 
-def get_random_text_from_folder(folder_path, num_samples=2):
-    """Выбирает случайные тексты из PDF файлов в указанной папке."""
-    if not os.path.exists(folder_path):
-        print(f"Ошибка: Папка {folder_path} не найдена!")
-        return []
+def query_to_vector(query, model_path):
+    """Преобразование запроса в средний вектор с использованием модели Word2Vec."""
+    try:
+        model = Word2Vec.load(model_path)
+    except FileNotFoundError:
+        print(f"Ошибка: модель {model_path} не найдена.")
+        return None
 
-    pdf_files = [f for f in os.listdir(folder_path) if f.endswith('.pdf')]
-    if not pdf_files:
-        print(f"Ошибка: Нет PDF файлов в {folder_path}!")
-        return []
-
-    sampled_files = random.sample(pdf_files, min(len(pdf_files), num_samples))
-    texts = [extract_text_from_pdf(os.path.join(folder_path, file)) for file in sampled_files]
-    return [text for text in texts if text]  # Убираем пустые тексты
-
-
-def categorize_text(text, model):
-    """Преобразует текст в векторное представление."""
-    words = text.split()
+    words = preprocess_text(query)
     vectors = [model.wv[word] for word in words if word in model.wv]
 
     if not vectors:
-        print(f"Предупреждение: все слова в '{text[:50]}...' отсутствуют в модели!")
+        print(f"Все слова в запросе '{query}' отсутствуют в модели!")
         return None
+
     return np.mean(vectors, axis=0)
 
+def find_closest_category(query, reference_data):
+    """Находит ближайшую категорию по косинусному сходству."""
+    best_match = None
+    highest_similarity = -1
+    query_vector = None
 
-def create_reference_system(data_models):
-    """Создаёт справочную систему на основе моделей."""
-    reference_data = {}
-    for category, (texts, model_path) in data_models.items():
-        try:
-            print(f"Загрузка модели для категории '{category}' из {model_path}")
-            model = Word2Vec.load(model_path)
+    # Поиск первой подходящей модели
+    for category in reference_data.keys():
+        model_path = f"models/medical_word2vec_{category}.model"
+        query_vector = query_to_vector(query, model_path)
+        if query_vector is not None:
+            break
 
-            vectors = [categorize_text(text, model) for text in texts]
-            vectors = [v for v in vectors if v is not None]
+    if query_vector is None:
+        return None, None, None  # Исправлено: теперь функция всегда возвращает 3 значения
 
-            if not vectors:
-                print(f"Предупреждение: нет данных для категории '{category}'.")
-                continue
+    # Сравнение запроса с категориями
+    for category, data in reference_data.items():
+        category_vector = np.array(data["vector"])
+        similarity = 1 - cosine(query_vector, category_vector)
 
-            reference_data[category] = np.mean(vectors, axis=0).tolist()
-        except FileNotFoundError:
-            print(f"Ошибка: модель {model_path} не найдена.")
+        if similarity > highest_similarity:
+            highest_similarity = similarity
+            best_match = category
 
-    with open("reference_system.json", "w", encoding="utf-8") as f:
-        json.dump(reference_data, f, ensure_ascii=False, indent=4)
-    print("Справочная система сохранена в reference_system.json")
-
+    return best_match, highest_similarity if best_match else None, None  # Исправлено: возвращаем 3 значения
 
 if __name__ == "__main__":
-    # Пути к датасетам (по вашим данным)
-    dermatomycosis_articles = get_random_text_from_folder("data/medical_articles_dermatomycosis", num_samples=2)
-    migraine_articles = get_random_text_from_folder("data/medical_articles_migraine", num_samples=2)
-    vkr_articles = get_random_text_from_folder("data/vkr_articles", num_samples=2)
+    reference_data = load_reference_data()
 
-    data_models = {
-        "dermatomycosis": (dermatomycosis_articles, "models/medical_word2vec_dermatomycosis.model"),
-        "migraine": (migraine_articles, "models/medical_word2vec_migraine.model"),
-        "vkr": (vkr_articles, "models/vkr_word2vec.model"),
-    }
+    if reference_data:
+        while True:
+            user_query = input("\nВведите ваш запрос (или 'выход' для завершения): ")
+            if user_query.lower() in ["выход", "exit"]:
+                print("Выход из системы.")
+                break
 
-    create_reference_system(data_models)
+            closest_category, similarity, _ = find_closest_category(user_query, reference_data)  # Исправлено
+
+            # Если не удалось найти ближайшую категорию, используем HashMap
+            if closest_category is None:
+                print(f"Не удалось найти категорию по модели. Используем HashMap...")
+                for key in HASHMAP_DB.keys():
+                    if key in user_query.lower():
+                        closest_category = key
+                        similarity = "N/A"
+                        break
+
+            if closest_category is None:
+                print("Нет информации по данному запросу.")
+                continue
+
+            response = reference_data.get(closest_category, {}).get("description", HASHMAP_DB.get(closest_category, "Нет информации."))
+
+            similarity_text = f" (Сходство: {similarity:.2f})" if isinstance(similarity, float) else ""
+            print(f"\n Ближайшая категория: {closest_category}{similarity_text}")
+            print(f"Ответ: {response}")
